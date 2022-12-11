@@ -23,19 +23,23 @@ import (
 
 func New(conn *grpc.ClientConn) logr.Logger {
 	// FIXME: handle nil conn.
-	l := &logger{}
+	l := &logger{
+		conn: conn,
+	}
 	return logr.New(l)
 }
 
-type logger struct{}
+type logger struct {
+	conn  *grpc.ClientConn
+	level int
+}
 
 var _ logr.LogSink = &logger{}
 
 func (l *logger) Init(info logr.RuntimeInfo) {}
 
 func (l *logger) Enabled(level int) bool {
-	// TODO: implement.
-	return true
+	return level >= l.level
 }
 
 func (l *logger) Info(level int, msg string, keysAndValues ...interface{})
