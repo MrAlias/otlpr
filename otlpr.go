@@ -17,6 +17,7 @@
 package otlpr
 
 import (
+	"github.com/MrAlias/otlpr/internal"
 	"github.com/go-logr/logr"
 	"google.golang.org/grpc"
 )
@@ -24,19 +25,22 @@ import (
 func New(conn *grpc.ClientConn) logr.Logger {
 	// FIXME: handle nil conn.
 	l := &logger{
-		conn: conn,
+		conn:      conn,
+		formatter: internal.NewFormatter(internal.Options{}),
 	}
 	return logr.New(l)
 }
 
 type logger struct {
-	conn  *grpc.ClientConn
-	level int
+	conn *grpc.ClientConn
+
+	formatter internal.Formatter
+	level     int
 }
 
 var _ logr.LogSink = &logger{}
 
-func (l *logger) Init(info logr.RuntimeInfo) {}
+func (l *logger) Init(logr.RuntimeInfo) {}
 
 func (l *logger) Enabled(level int) bool {
 	return level >= l.level
