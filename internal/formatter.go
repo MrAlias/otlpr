@@ -61,15 +61,15 @@ func (f Formatter) attrs(kvList []interface{}) []*cpb.KeyValue {
 	if len(kvList)%2 != 0 {
 		kvList = append(kvList, noValue)
 	}
-	out := make([]*cpb.KeyValue, 0, len(kvList)/2)
+	out := make([]*cpb.KeyValue, (len(kvList)+1)/2)
 	for i := 0; i < len(kvList); i += 2 {
-		kv := out[i/2]
-		f.assignKeyValue(kv, kvList[i], kvList[i+1], 0)
+		out[i/2] = f.assignKeyValue(kvList[i], kvList[i+1], 0)
 	}
 	return out
 }
 
-func (f Formatter) assignKeyValue(out *cpb.KeyValue, key, val interface{}, depth int) {
+func (f Formatter) assignKeyValue(key, val interface{}, depth int) *cpb.KeyValue {
+	out := new(cpb.KeyValue)
 	switch k := key.(type) {
 	case string:
 		out.Key = k
@@ -83,19 +83,21 @@ func (f Formatter) assignKeyValue(out *cpb.KeyValue, key, val interface{}, depth
 	default:
 		out.Key = f.nonStringKey(key)
 	}
-	f.assignValue(out.Value, val, depth)
+	out.Value = f.assignValue(val, depth)
+	return out
 }
 
 func (f Formatter) nonStringKey(k interface{}) string {
 	return fmt.Sprintf("<non-string-key: %s>", f.snippet(k))
 }
 
-func (f Formatter) assignValue(out *cpb.AnyValue, val interface{}, depth int) {
+func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
+	out := new(cpb.AnyValue)
 	if depth > f.opts.MaxLogDepth {
 		out.Value = &cpb.AnyValue_StringValue{
 			StringValue: `"<max-log-depth-exceeded>"`,
 		}
-		return
+		return out
 	}
 
 	// Handle types that take full control of logging.
@@ -116,91 +118,74 @@ func (f Formatter) assignValue(out *cpb.AnyValue, val interface{}, depth int) {
 	switch v := val.(type) {
 	case bool:
 		out.Value = &cpb.AnyValue_BoolValue{BoolValue: v}
-		return
 	case string:
 		out.Value = &cpb.AnyValue_StringValue{StringValue: v}
-		return
 	case int:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case int8:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case int16:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case int32:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case int64:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: v}
-		return
 	case uint:
 		f.assignUintVal(out, uint64(v))
-		return
 	case uint8:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case uint16:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case uint32:
 		out.Value = &cpb.AnyValue_IntValue{IntValue: int64(v)}
-		return
 	case uintptr:
 		f.assignUintVal(out, uint64(v))
-		return
 	case uint64:
 		f.assignUintVal(out, uint64(v))
-		return
 	case float32:
 		out.Value = &cpb.AnyValue_DoubleValue{DoubleValue: float64(v)}
-		return
 	case float64:
 		out.Value = &cpb.AnyValue_DoubleValue{DoubleValue: v}
-		return
 	case complex64:
 		out.Value = &cpb.AnyValue_StringValue{
 			StringValue: `"` + strconv.FormatComplex(complex128(v), 'f', -1, 64) + `"`,
 		}
-		return
 	case complex128:
 		out.Value = &cpb.AnyValue_StringValue{
 			StringValue: `"` + strconv.FormatComplex(v, 'f', -1, 64) + `"`,
 		}
-		return
+	}
+
+	if out.Value != nil {
+		return out
 	}
 
 	t := reflect.TypeOf(val)
 	if t == nil {
 		// Empty value.
-		return
+		return out
 	}
 	v := reflect.ValueOf(val)
 	switch t.Kind() {
 	case reflect.Struct:
 		n := t.NumField()
-		kvs := make([]*cpb.KeyValue, n)
-		total := n
+		kvs := make([]*cpb.KeyValue, 0, n)
 		for i := 0; i < n; i++ {
 			fld := t.Field(i)
 			if fld.PkgPath != "" {
 				// reflect says this field is only defined for non-exported
 				// fields.
-				total--
 				continue
 			}
 			if !v.Field(i).CanInterface() {
 				// reflect isn't clear exactly what this means, but we can't
 				// use it.
-				total--
 				continue
 			}
 			var name string
 			var omitempty bool
 			if tag, found := fld.Tag.Lookup("json"); found {
 				if tag == "-" {
-					total--
 					continue
 				}
 				if comma := strings.Index(tag, ","); comma != -1 {
@@ -216,21 +201,21 @@ func (f Formatter) assignValue(out *cpb.AnyValue, val interface{}, depth int) {
 				}
 			}
 			if omitempty && isEmpty(v.Field(i)) {
-				total--
 				continue
 			}
-			kv := kvs[i]
 			if fld.Anonymous && fld.Type.Kind() == reflect.Struct && name == "" {
-				f.assignKeyValue(kv, fld.Type.String(), v.Field(i).Interface(), depth+1)
+				kv := f.assignKeyValue(fld.Type.String(), v.Field(i).Interface(), depth+1)
+				kvs = append(kvs, kv)
 				continue
 			}
 			if name == "" {
 				name = fld.Name
 			}
+			kv := new(cpb.KeyValue)
 			kv.Key = name
-			f.assignValue(kv.Value, v.Field(i).Interface(), depth+1)
+			kv.Value = f.assignValue(v.Field(i).Interface(), depth+1)
+			kvs = append(kvs, kv)
 		}
-		kvs = kvs[:total]
 		out.Value = &cpb.AnyValue_KvlistValue{
 			KvlistValue: &cpb.KeyValueList{Values: kvs},
 		}
@@ -238,21 +223,17 @@ func (f Formatter) assignValue(out *cpb.AnyValue, val interface{}, depth int) {
 		a := make([]*cpb.AnyValue, v.Len())
 		for i := 0; i < v.Len(); i++ {
 			e := v.Index(i)
-			f.assignValue(a[i], e.Interface(), depth+1)
+			a[i] = f.assignValue(e.Interface(), depth+1)
 		}
 		out.Value = &cpb.AnyValue_ArrayValue{
 			ArrayValue: &cpb.ArrayValue{Values: a},
 		}
-		return
 	case reflect.Map:
-		kvs := make([]*cpb.KeyValue, v.Len())
+		kvs := make([]*cpb.KeyValue, 0, v.Len())
 		iter := v.MapRange()
-		var i int
 		for iter.Next() {
-			kv := kvs[i]
 			k, v := iter.Key().Interface(), iter.Value().Interface()
-			f.assignKeyValue(kv, k, v, depth+1)
-			i++
+			kvs = append(kvs, f.assignKeyValue(k, v, depth+1))
 		}
 		out.Value = &cpb.AnyValue_KvlistValue{
 			KvlistValue: &cpb.KeyValueList{Values: kvs},
@@ -260,15 +241,17 @@ func (f Formatter) assignValue(out *cpb.AnyValue, val interface{}, depth int) {
 	case reflect.Ptr, reflect.Interface:
 		if v.IsNil() {
 			// Empty value.
-			return
+			return out
 		}
-		f.assignValue(out, v.Elem().Interface(), depth)
-		return
+		return f.assignValue(v.Elem().Interface(), depth)
 	}
 
-	out.Value = &cpb.AnyValue_StringValue{
-		StringValue: fmt.Sprintf(`"<unhandled-%s>"`, t.Kind().String()),
+	if out.Value == nil {
+		out.Value = &cpb.AnyValue_StringValue{
+			StringValue: fmt.Sprintf(`"<unhandled-%s>"`, t.Kind().String()),
+		}
 	}
+	return out
 }
 
 func isEmpty(v reflect.Value) bool {
