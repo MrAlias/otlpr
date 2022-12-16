@@ -26,8 +26,14 @@ import (
 	"google.golang.org/grpc"
 )
 
+// New returns a new logr Logger that will export logs over conn using OTLP.
+// The conn is expected to be ready to use when passed. If conn is nil a
+// discard logger is returned.
 func New(conn *grpc.ClientConn) logr.Logger {
-	// FIXME: handle nil conn.
+	if conn == nil {
+		return logr.Discard()
+	}
+
 	l := &logger{
 		exp:       newExporter(conn),
 		formatter: internal.NewFormatter(internal.Options{}),
