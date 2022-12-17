@@ -347,48 +347,53 @@ func (f Formatter) level(l int) lpb.SeverityNumber {
 	return lpb.SeverityNumber(int(lpb.SeverityNumber_SEVERITY_NUMBER_WARN4) - l)
 }
 
-func (f Formatter) FormatInfo(level int, msg string, kvList []interface{}) *lpb.LogRecord {
+func (f Formatter) render(v lpb.SeverityNumber, body *cpb.AnyValue, kvList []interface{}) *lpb.LogRecord {
 	return &lpb.LogRecord{
 		TimeUnixNano:   uint64(time.Now().UnixNano()),
-		SeverityNumber: f.level(level),
-		SeverityText:   strconv.Itoa(level),
-		Body: &cpb.AnyValue{
-			Value: &cpb.AnyValue_StringValue{StringValue: msg},
-		},
-		Attributes: append(f.valuesAttr, f.attrs(kvList)...),
+		SeverityNumber: v,
+		Body:           body,
+		Attributes:     append(f.valuesAttr, f.attrs(kvList)...),
 	}
 }
 
-func (f Formatter) FormatError(err error, msg string, kvList []interface{}) *lpb.LogRecord {
-	return &lpb.LogRecord{
-		TimeUnixNano:   uint64(time.Now().UnixNano()),
-		SeverityNumber: lpb.SeverityNumber_SEVERITY_NUMBER_ERROR,
-		Body: &cpb.AnyValue{
-			Value: &cpb.AnyValue_KvlistValue{
-				KvlistValue: &cpb.KeyValueList{
-					Values: []*cpb.KeyValue{
-						{
-							Key: "Error",
-							Value: &cpb.AnyValue{
-								Value: &cpb.AnyValue_StringValue{
-									StringValue: err.Error(),
-								},
+func (f Formatter) infoBody(msg string) *cpb.AnyValue {
+	return &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: msg}}
+}
+
+func (f Formatter) FormatInfo(level int, msg string, kvList []interface{}) *lpb.LogRecord {
+	return f.render(f.level(level), f.infoBody(msg), kvList)
+}
+
+func (f Formatter) errBody(err error, msg string) *cpb.AnyValue {
+	return &cpb.AnyValue{
+		Value: &cpb.AnyValue_KvlistValue{
+			KvlistValue: &cpb.KeyValueList{
+				Values: []*cpb.KeyValue{
+					{
+						Key: "Error",
+						Value: &cpb.AnyValue{
+							Value: &cpb.AnyValue_StringValue{
+								StringValue: err.Error(),
 							},
 						},
-						{
-							Key: "Message",
-							Value: &cpb.AnyValue{
-								Value: &cpb.AnyValue_StringValue{
-									StringValue: msg,
-								},
+					},
+					{
+						Key: "Message",
+						Value: &cpb.AnyValue{
+							Value: &cpb.AnyValue_StringValue{
+								StringValue: msg,
 							},
 						},
 					},
 				},
 			},
 		},
-		Attributes: append(f.valuesAttr, f.attrs(kvList)...),
 	}
+}
+
+func (f Formatter) FormatError(err error, msg string, kvList []interface{}) *lpb.LogRecord {
+	const v = lpb.SeverityNumber_SEVERITY_NUMBER_ERROR
+	return f.render(v, f.errBody(err, msg), kvList)
 }
 
 // AddName appends the specified name.
