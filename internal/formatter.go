@@ -405,7 +405,7 @@ func (f *Formatter) AddValues(kvList []interface{}) {
 	f.values = append(f.values[:n:n], kvList...)
 
 	// Pre-render values, so we don't have to do it on each Info/Error call.
-	f.valuesAttr = f.attrs(kvList)
+	f.valuesAttr = f.attrs(f.values)
 }
 
 // AddCallDepth increases the number of stack-frames to skip when attributing
