@@ -1,2 +1,3 @@
 # otlpr
-An logr implementation using OTLP
+
+A logr implementation using OTLP
