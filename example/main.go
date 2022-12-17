@@ -23,10 +23,22 @@ import (
 	"os/signal"
 
 	"github.com/MrAlias/otlpr"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	sdk "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 )
 
-var targetPtr = flag.String("target", "127.0.0.1:4317", "address of the target collector")
+var targetPtr = flag.String("target", "127.0.0.1:4317", "OTLP target")
+
+func tracerProvider(ctx context.Context, conn *grpc.ClientConn) (trace.TracerProvider, error) {
+	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		return nil, err
+	}
+	// Use a syncer for demo purposes only.
+	return sdk.NewTracerProvider(sdk.WithSyncer(exp)), nil
+}
 
 func main() {
 	flag.Parse()
@@ -39,7 +51,16 @@ func main() {
 		log.Fatal(err)
 	}
 
-	l := otlpr.New(conn)
+	tp, err := tracerProvider(ctx, conn)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	var span trace.Span
+	ctx, span = tp.Tracer("github.com/MrAlias/otlpr/example").Start(ctx, "main")
+	defer span.End()
+
+	l := otlpr.WithContext(otlpr.New(conn), ctx)
 	l.Info("information message", "function", "main")
 
 	err = errors.New("example error")
