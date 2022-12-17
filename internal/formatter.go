@@ -15,6 +15,7 @@
 package internal
 
 import (
+	"context"
 	"encoding"
 	"fmt"
 	"reflect"
@@ -23,6 +24,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/trace"
 	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
@@ -43,6 +45,7 @@ type Formatter struct {
 	opts Options
 
 	name       string
+	spanCtx    trace.SpanContext
 	depth      int
 	values     []interface{}
 	valuesAttr []*cpb.KeyValue
@@ -348,12 +351,22 @@ func (f Formatter) level(l int) lpb.SeverityNumber {
 }
 
 func (f Formatter) render(v lpb.SeverityNumber, body *cpb.AnyValue, kvList []interface{}) *lpb.LogRecord {
-	return &lpb.LogRecord{
+	out := &lpb.LogRecord{
 		TimeUnixNano:   uint64(time.Now().UnixNano()),
 		SeverityNumber: v,
 		Body:           body,
 		Attributes:     append(f.valuesAttr, f.attrs(kvList)...),
 	}
+	if f.spanCtx.IsValid() {
+		tID := f.spanCtx.TraceID()
+		out.TraceId = tID[:]
+
+		sID := f.spanCtx.SpanID()
+		out.SpanId = sID[:]
+
+		out.Flags = uint32(f.spanCtx.TraceFlags())
+	}
+	return out
 }
 
 func (f Formatter) infoBody(msg string) *cpb.AnyValue {
@@ -402,6 +415,11 @@ func (f *Formatter) AddName(name string) {
 		f.name += "/"
 	}
 	f.name += name
+}
+
+// AddContext adds log values for the span in ctx if it exists.
+func (f *Formatter) AddContext(ctx context.Context) {
+	f.spanCtx = trace.SpanContextFromContext(ctx)
 }
 
 func (f *Formatter) AddValues(kvList []interface{}) {
