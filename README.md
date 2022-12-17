@@ -16,6 +16,8 @@ Create a [`logr.Logger`] with this connection.
 logger := otlpr.New(conn)
 ```
 
+See the [example] for a working example application.
+
 ## Annotating Span Context
 
 OTLP is able to associate span context with log messages.
@@ -32,3 +34,4 @@ logger = otlpr.WithContext(logger, context.Background())
 ```
 
 [`logr.Logger`]: https://pkg.go.dev/github.com/go-logr/logr#Logger
+[example]: ./example/
