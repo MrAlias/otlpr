@@ -18,7 +18,9 @@ import (
 	"context"
 	"encoding"
 	"fmt"
+	"path/filepath"
 	"reflect"
+	"runtime"
 	"strconv"
 	"strings"
 	"time"
@@ -29,17 +31,42 @@ import (
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
 
+// Based on https://pkg.go.dev/github.com/go-logr/logr/funcr.
+
 const noValue = "<no-value>"
 
 // Defaults for Options.
 const defaultMaxLogDepth = 16
 
 type Options struct {
+	// LogCaller defines when to add a "caller" key to some or all log lines.
+	// This has some overhead, so some users might not want it.
+	LogCaller MessageClass
+
+	// LogCallerFunc defines if the calling function name shoule be logged.
+	// This has no effect if caller logging is not enabled (see
+	// Options.LogCaller).
+	LogCallerFunc bool
+
 	// MaxLogDepth defines how many levels of nested fields (e.g. a struct that
 	// contains a struct, etc.) to log. If this field is not specified, a
 	// default value, 16, will be used.
 	MaxLogDepth int
 }
+
+// MessageClass indicates which category or categories of messages to consider.
+type MessageClass int
+
+const (
+	// None ignores all message classes.
+	None MessageClass = iota
+	// All considers all message classes.
+	All
+	// Info only considers info messages.
+	Info
+	// Error only considers error messages.
+	Error
+)
 
 type Formatter struct {
 	opts Options
@@ -350,6 +377,35 @@ func (f Formatter) level(l int) lpb.SeverityNumber {
 	return lpb.SeverityNumber(int(lpb.SeverityNumber_SEVERITY_NUMBER_WARN4) - l)
 }
 
+// Caller represents the original call site for a log line, after considering
+// logr.Logger.WithCallDepth and logr.Logger.WithCallStackHelper.  The File and
+// Line fields will always be provided, while the Func field is optional.
+type Caller struct {
+	// File is the basename of the file for this call site.
+	File string `json:"file"`
+	// Line is the line number in the file for this call site.
+	Line int `json:"line"`
+	// Func is the function name for this call site, or empty if
+	// Options.LogCallerFunc is not enabled.
+	Func string `json:"function,omitempty"`
+}
+
+func (f Formatter) caller() Caller {
+	// +1 for this frame, +1 for Info/Error.
+	pc, file, line, ok := runtime.Caller(f.depth + 2)
+	if !ok {
+		return Caller{"<unknown>", 0, ""}
+	}
+	fn := ""
+	if f.opts.LogCallerFunc {
+		if fp := runtime.FuncForPC(pc); fp != nil {
+			fn = fp.Name()
+		}
+	}
+
+	return Caller{filepath.Base(file), line, fn}
+}
+
 func (f Formatter) render(v lpb.SeverityNumber, body *cpb.AnyValue, kvList []interface{}) *lpb.LogRecord {
 	out := &lpb.LogRecord{
 		TimeUnixNano:   uint64(time.Now().UnixNano()),
@@ -371,10 +427,6 @@ func (f Formatter) render(v lpb.SeverityNumber, body *cpb.AnyValue, kvList []int
 
 func (f Formatter) infoBody(msg string) *cpb.AnyValue {
 	return &cpb.AnyValue{Value: &cpb.AnyValue_StringValue{StringValue: msg}}
-}
-
-func (f Formatter) FormatInfo(level int, msg string, kvList []interface{}) *lpb.LogRecord {
-	return f.render(f.level(level), f.infoBody(msg), kvList)
 }
 
 func (f Formatter) errBody(err error, msg string) *cpb.AnyValue {
@@ -404,7 +456,23 @@ func (f Formatter) errBody(err error, msg string) *cpb.AnyValue {
 	}
 }
 
+// Init configures this Formatter from runtime info, such as the call depth
+// imposed by logr itself.
+func (f *Formatter) Init(info logr.RuntimeInfo) {
+	f.depth += info.CallDepth
+}
+
+func (f Formatter) FormatInfo(level int, msg string, kvList []interface{}) *lpb.LogRecord {
+	if policy := f.opts.LogCaller; policy == All || policy == Error {
+		kvList = append(kvList, "caller", f.caller())
+	}
+	return f.render(f.level(level), f.infoBody(msg), kvList)
+}
+
 func (f Formatter) FormatError(err error, msg string, kvList []interface{}) *lpb.LogRecord {
+	if policy := f.opts.LogCaller; policy == All || policy == Error {
+		kvList = append(kvList, "caller", f.caller())
+	}
 	const v = lpb.SeverityNumber_SEVERITY_NUMBER_ERROR
 	return f.render(v, f.errBody(err, msg), kvList)
 }

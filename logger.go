@@ -28,16 +28,64 @@ import (
 // The conn is expected to be ready to use when passed. If conn is nil a
 // discard logger is returned.
 func New(conn *grpc.ClientConn) logr.Logger {
+	return NewWithOptions(conn, Options{})
+}
+
+// NewWithOptions returns a new logr Logger that will export logs over conn using OTLP. See New for details.
+func NewWithOptions(conn *grpc.ClientConn, opts Options) logr.Logger {
 	if conn == nil {
 		return logr.Discard()
 	}
 
+	if opts.Depth < 0 {
+		opts.Depth = 0
+	}
+
+	fopts := internal.Options{
+		LogCaller:     internal.MessageClass(opts.LogCaller),
+		LogCallerFunc: opts.LogCallerFunc,
+	}
+
 	l := &logSink{
 		exp:       newExporter(conn),
-		formatter: internal.NewFormatter(internal.Options{}),
+		formatter: internal.NewFormatter(fopts),
 	}
+
+	// For skipping both our own logSink.Info/Error and logr's.
+	l.formatter.AddCallDepth(2 + opts.Depth)
+
 	return logr.New(l)
 }
+
+// Options carries parameters which influence the way logs are generated.
+type Options struct {
+	// Depth biases the assumed number of call frames to the "true" caller.
+	// This is useful when the calling code calls a function which then calls
+	// stdr (e.g. a logging shim to another API).  Values less than zero will
+	// be treated as zero.
+	Depth int
+
+	// LogCaller tells otlpr to add a "caller" key to some or all log lines.
+	LogCaller MessageClass
+
+	// LogCallerFunc tells otlpr to also log the calling function name. This
+	// has no effect if caller logging is not enabled (see Options.LogCaller).
+	LogCallerFunc bool
+}
+
+// MessageClass indicates which category or categories of messages to consider.
+type MessageClass int
+
+const (
+	// None ignores all message classes.
+	None MessageClass = iota
+	// All considers all message classes.
+	All
+	// Info only considers info messages.
+	Info
+	// Error only considers error messages.
+	Error
+)
 
 type logSink struct {
 	exp *exporter
