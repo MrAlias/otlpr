@@ -1,6 +1,10 @@
 # otlpr
 
+[![Go Reference](https://pkg.go.dev/badge/github.com/MrAlias/otlpr.svg)](https://pkg.go.dev/github.com/MrAlias/otlpr)
+
 A logr implementation using OTLP
+
+:construction: This repository is a work in progresss and not production ready.
 
 ## Getting Started
 
