@@ -21,6 +21,7 @@ import (
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/resource"
+	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
 	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
 	rpb "go.opentelemetry.io/proto/otlp/resource/v1"
@@ -50,9 +51,10 @@ func NewWithOptions(conn *grpc.ClientConn, opts Options) logr.Logger {
 	}
 
 	l := &logSink{
-		exp:       newExporter(conn),
+		client:    collpb.NewLogsServiceClient(conn),
 		formatter: internal.NewFormatter(fopts),
 	}
+	l.batcher = opts.Batcher.start(l.export)
 
 	// For skip our own logSink.Info/Error.
 	l.formatter.AddCallDepth(1 + opts.Depth)
@@ -74,6 +76,10 @@ type Options struct {
 	// LogCallerFunc tells otlpr to also log the calling function name. This
 	// has no effect if caller logging is not enabled (see Options.LogCaller).
 	LogCallerFunc bool
+
+	// Batcher tells otlpr to batch log messages with the provided Batcher
+	// configuration.
+	Batcher Batcher
 }
 
 // MessageClass indicates which category or categories of messages to consider.
@@ -91,7 +97,8 @@ const (
 )
 
 type logSink struct {
-	exp *exporter
+	client  collpb.LogsServiceClient
+	batcher *batcher
 
 	formatter internal.Formatter
 	level     int
@@ -113,25 +120,12 @@ func (l *logSink) Enabled(level int) bool {
 	return level >= l.level
 }
 
-func (l *logSink) export(msg *lpb.LogRecord) {
-	sl := &lpb.ScopeLogs{LogRecords: []*lpb.LogRecord{msg}}
-	if l.scope != nil {
-		sl.SchemaUrl, sl.Scope = l.scopeSchema, l.scope
-	}
-
-	rl := &lpb.ResourceLogs{ScopeLogs: []*lpb.ScopeLogs{sl}}
-	if l.res != nil {
-		rl.SchemaUrl, rl.Resource = l.resSchema, l.res
-	}
-	l.exp.enqueue(rl)
-}
-
 func (l *logSink) Info(level int, msg string, keysAndValues ...interface{}) {
-	l.export(l.formatter.FormatInfo(level, msg, keysAndValues))
+	l.batcher.Append(l.formatter.FormatInfo(level, msg, keysAndValues))
 }
 
 func (l *logSink) Error(err error, msg string, keysAndValues ...interface{}) {
-	l.export(l.formatter.FormatError(err, msg, keysAndValues))
+	l.batcher.Append(l.formatter.FormatError(err, msg, keysAndValues))
 }
 
 func (l *logSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
@@ -157,6 +151,23 @@ func (l *logSink) WithResource(res *resource.Resource) logr.LogSink {
 func (l *logSink) WithScope(s instrumentation.Scope) logr.LogSink {
 	l.scopeSchema, l.scope = l.formatter.FormatScope(s)
 	return l
+}
+
+func (l *logSink) export(rec []*lpb.LogRecord) {
+	sl := &lpb.ScopeLogs{LogRecords: rec}
+	if l.scope != nil {
+		sl.SchemaUrl, sl.Scope = l.scopeSchema, l.scope
+	}
+
+	rl := &lpb.ResourceLogs{ScopeLogs: []*lpb.ScopeLogs{sl}}
+	if l.res != nil {
+		rl.SchemaUrl, rl.Resource = l.resSchema, l.res
+	}
+	_, _ = l.client.Export(context.Background(), &collpb.ExportLogsServiceRequest{
+		ResourceLogs: []*lpb.ResourceLogs{rl},
+	})
+	// TODO: handle partial success response.
+	// TODO: handle returned error (log it?).
 }
 
 // WithContext returns an updated logger that will log information about any

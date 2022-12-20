@@ -82,6 +82,7 @@ func setup(ctx context.Context, conn *grpc.ClientConn) (trace.Tracer, logr.Logge
 	l := otlpr.NewWithOptions(conn, otlpr.Options{
 		LogCaller:     otlpr.All,
 		LogCallerFunc: true,
+		Batcher:       otlpr.Batcher{Messages: 2},
 	})
 	l = otlpr.WithResource(l, res)
 	scope := instrumentation.Scope{Name: lib, Version: libVer}
