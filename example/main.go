@@ -21,6 +21,7 @@ import (
 	"log"
 	"os"
 	"os/signal"
+	"time"
 
 	"github.com/MrAlias/otlpr"
 	"github.com/go-logr/logr"
@@ -82,7 +83,7 @@ func setup(ctx context.Context, conn *grpc.ClientConn) (trace.Tracer, logr.Logge
 	l := otlpr.NewWithOptions(conn, otlpr.Options{
 		LogCaller:     otlpr.All,
 		LogCallerFunc: true,
-		Batcher:       otlpr.Batcher{Messages: 2},
+		Batcher:       otlpr.Batcher{Messages: 2, Timeout: 3 * time.Second},
 	})
 	l = otlpr.WithResource(l, res)
 	scope := instrumentation.Scope{Name: lib, Version: libVer}
