@@ -26,6 +26,7 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/instrumentation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/trace"
@@ -106,6 +107,8 @@ func (f Formatter) keyValue(key, val interface{}, depth int) *cpb.KeyValue {
 	switch k := key.(type) {
 	case string:
 		out.Key = k
+	case attribute.Key:
+		out.Key = string(k)
 	case encoding.TextMarshaler:
 		txt, err := k.MarshalText()
 		if err != nil {

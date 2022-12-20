@@ -23,21 +23,71 @@ import (
 	"os/signal"
 
 	"github.com/MrAlias/otlpr"
+	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	sdk "go.opentelemetry.io/otel/sdk/trace"
+	semconv "go.opentelemetry.io/otel/semconv/v1.12.0"
 	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc"
 )
 
+const (
+	lib    = "github.com/MrAlias/otlpr/example"
+	libVer = "v0.1.0"
+)
+
 var targetPtr = flag.String("target", "127.0.0.1:4317", "OTLP target")
 
-func tracerProvider(ctx context.Context, conn *grpc.ClientConn) (trace.TracerProvider, error) {
+type App struct {
+	tracer trace.Tracer
+	logger logr.Logger
+}
+
+func NewApp(tracer trace.Tracer, logger logr.Logger) App {
+	return App{tracer: tracer, logger: logger}
+}
+
+// Hello logs a greeting to user.
+func (a App) Hello(ctx context.Context, user string) error {
+	var span trace.Span
+	ctx, span = a.tracer.Start(ctx, "Hello")
+	defer span.End()
+
+	if user == "" {
+		span.SetStatus(codes.Error, "invalid user")
+		return errors.New("no user name provided")
+	}
+	otlpr.WithContext(a.logger, ctx).Info("Hello!", "user", user)
+	return nil
+}
+
+func setup(ctx context.Context, conn *grpc.ClientConn) (trace.Tracer, logr.Logger, error) {
 	exp, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
 	if err != nil {
-		return nil, err
+		return nil, logr.Discard(), err
 	}
+
+	res := resource.NewWithAttributes(
+		semconv.SchemaURL,
+		semconv.ServiceNameKey.String("example application"),
+	)
+
 	// Use a syncer for demo purposes only.
-	return sdk.NewTracerProvider(sdk.WithSyncer(exp)), nil
+	tp := sdk.NewTracerProvider(sdk.WithSyncer(exp), sdk.WithResource(res))
+	tracer := tp.Tracer(lib, trace.WithInstrumentationVersion(libVer))
+
+	l := otlpr.NewWithOptions(conn, otlpr.Options{
+		LogCaller:     otlpr.All,
+		LogCallerFunc: true,
+	})
+	l = otlpr.WithResource(l, res)
+	scope := instrumentation.Scope{Name: lib, Version: libVer}
+	l = otlpr.WithScope(l, scope)
+
+	return tracer, l, nil
 }
 
 func main() {
@@ -51,22 +101,18 @@ func main() {
 		log.Fatal(err)
 	}
 
-	tp, err := tracerProvider(ctx, conn)
+	tracer, logger, err := setup(ctx, conn)
 	if err != nil {
 		log.Fatal(err)
 	}
-
 	var span trace.Span
-	ctx, span = tp.Tracer("github.com/MrAlias/otlpr/example").Start(ctx, "main")
+	ctx, span = tracer.Start(ctx, "main")
 	defer span.End()
 
-	l := otlpr.NewWithOptions(conn, otlpr.Options{
-		LogCaller:     otlpr.All,
-		LogCallerFunc: true,
-	})
-	l = otlpr.WithContext(l, ctx)
-	l.Info("information message", "function", "main")
-
-	err = errors.New("example error")
-	l.Error(err, "error context message", "testing", true)
+	app := NewApp(tracer, logger)
+	for _, user := range []string{"alice", ""} {
+		if err := app.Hello(ctx, user); err != nil {
+			logger.Error(err, "failed to say hello", "user", user, "testing", true)
+		}
+	}
 }
