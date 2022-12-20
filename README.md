@@ -22,6 +22,23 @@ logger := otlpr.New(conn)
 
 See the [example] for a working example application.
 
+## Batching
+
+By default the logger will export single log messages as they are received.
+A `Batcher` can be used to change this behavior.
+
+```go
+opts := otlpr.Options{
+	Batcher: otlpr.Batcher{
+		// Only queue at most 100 messages.
+		Messages: 100,
+		// Only wait 3 seconds for the queue to fill.
+		Timeout: 3 * time.Second,
+	},
+}
+logger := otlpr.NewWithOptions(conn, opts)
+```
+
 ## Annotating Span Context
 
 OTLP is able to associate span context with log messages.
