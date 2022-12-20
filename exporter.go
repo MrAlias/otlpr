@@ -18,20 +18,12 @@ import (
 	"context"
 
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
-	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
-	rpb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/grpc"
 )
 
 type exporter struct {
 	client collpb.LogsServiceClient
-
-	res       *rpb.Resource
-	resSchema string
-
-	scope       *cpb.InstrumentationScope
-	scopeSchema string
 }
 
 func newExporter(conn *grpc.ClientConn) *exporter {
