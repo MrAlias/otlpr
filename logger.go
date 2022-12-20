@@ -12,8 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package otlpr provides a github.com/go-logr/logr.Logger implementation that
-// exports log records in the OpenTelemetry OTLP log format.
 package otlpr
 
 import (
