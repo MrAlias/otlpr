@@ -18,32 +18,30 @@ import (
 	"context"
 
 	collpb "go.opentelemetry.io/proto/otlp/collector/logs/v1"
+	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
+	rpb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/grpc"
 )
 
 type exporter struct {
 	client collpb.LogsServiceClient
+
+	res       *rpb.Resource
+	resSchema string
+
+	scope       *cpb.InstrumentationScope
+	scopeSchema string
 }
 
 func newExporter(conn *grpc.ClientConn) *exporter {
 	return &exporter{client: collpb.NewLogsServiceClient(conn)}
 }
 
-func (e *exporter) enqueue(msg *lpb.LogRecord) {
+func (e *exporter) enqueue(rl *lpb.ResourceLogs) {
 	// TODO: handle batching.
 	_, _ = e.client.Export(context.Background(), &collpb.ExportLogsServiceRequest{
-		ResourceLogs: []*lpb.ResourceLogs{
-			{
-				ScopeLogs: []*lpb.ScopeLogs{
-					{
-						LogRecords: []*lpb.LogRecord{
-							msg,
-						},
-					},
-				},
-			},
-		},
+		ResourceLogs: []*lpb.ResourceLogs{rl},
 	})
 	// TODO: handle partial success response.
 	// TODO: handle returned error (log it?).

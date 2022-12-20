@@ -21,6 +21,11 @@ import (
 
 	"github.com/MrAlias/otlpr/internal"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	"go.opentelemetry.io/otel/sdk/resource"
+	cpb "go.opentelemetry.io/proto/otlp/common/v1"
+	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
+	rpb "go.opentelemetry.io/proto/otlp/resource/v1"
 	"google.golang.org/grpc"
 )
 
@@ -92,22 +97,41 @@ type logSink struct {
 
 	formatter internal.Formatter
 	level     int
+
+	res       *rpb.Resource
+	resSchema string
+
+	scope       *cpb.InstrumentationScope
+	scopeSchema string
 }
 
 var _ logr.LogSink = &logSink{}
 
-func (l *logSink) Init(logr.RuntimeInfo) {}
+func (l *logSink) Init(ri logr.RuntimeInfo) {}
 
 func (l *logSink) Enabled(level int) bool {
 	return level >= l.level
 }
 
+func (l *logSink) export(msg *lpb.LogRecord) {
+	sl := &lpb.ScopeLogs{LogRecords: []*lpb.LogRecord{msg}}
+	if l.scope != nil {
+		sl.SchemaUrl, sl.Scope = l.scopeSchema, l.scope
+	}
+
+	rl := &lpb.ResourceLogs{ScopeLogs: []*lpb.ScopeLogs{sl}}
+	if l.res != nil {
+		rl.SchemaUrl, rl.Resource = l.resSchema, l.res
+	}
+	l.exp.enqueue(rl)
+}
+
 func (l *logSink) Info(level int, msg string, keysAndValues ...interface{}) {
-	l.exp.enqueue(l.formatter.FormatInfo(level, msg, keysAndValues))
+	l.export(l.formatter.FormatInfo(level, msg, keysAndValues))
 }
 
 func (l *logSink) Error(err error, msg string, keysAndValues ...interface{}) {
-	l.exp.enqueue(l.formatter.FormatError(err, msg, keysAndValues))
+	l.export(l.formatter.FormatError(err, msg, keysAndValues))
 }
 
 func (l *logSink) WithValues(keysAndValues ...interface{}) logr.LogSink {
@@ -125,12 +149,42 @@ func (l *logSink) WithContext(ctx context.Context) logr.LogSink {
 	return l
 }
 
+func (l *logSink) WithResource(res *resource.Resource) logr.LogSink {
+	l.resSchema, l.res = l.formatter.FormatResource(res)
+	return l
+}
+
+func (l *logSink) WithScope(s instrumentation.Scope) logr.LogSink {
+	l.scopeSchema, l.scope = l.formatter.FormatScope(s)
+	return l
+}
+
 // WithContext returns an updated logger that will log information about any
 // span in ctx if one exists with each log message. It does nothing for loggers
 // where the sink doesn't support a context.
 func WithContext(l logr.Logger, ctx context.Context) logr.Logger {
 	if ls, ok := l.GetSink().(*logSink); ok {
 		l = l.WithSink(ls.WithContext(ctx))
+	}
+	return l
+}
+
+// WithResource returns an updated logger that export log information with the
+// provided resource. It does nothing for loggers where the sink doesn't
+// support a resource.
+func WithResource(l logr.Logger, res *resource.Resource) logr.Logger {
+	if ls, ok := l.GetSink().(*logSink); ok {
+		l = l.WithSink(ls.WithResource(res))
+	}
+	return l
+}
+
+// WithScope returns an updated logger that export log information with the
+// provided instrumentation scope. It does nothing for loggers where the sink
+// doesn't support a resource.
+func WithScope(l logr.Logger, scope instrumentation.Scope) logr.Logger {
+	if ls, ok := l.GetSink().(*logSink); ok {
+		l = l.WithSink(ls.WithScope(scope))
 	}
 	return l
 }

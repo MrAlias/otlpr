@@ -26,9 +26,12 @@ import (
 	"time"
 
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel/sdk/instrumentation"
+	"go.opentelemetry.io/otel/sdk/resource"
 	"go.opentelemetry.io/otel/trace"
 	cpb "go.opentelemetry.io/proto/otlp/common/v1"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
+	rpb "go.opentelemetry.io/proto/otlp/resource/v1"
 )
 
 // Based on https://pkg.go.dev/github.com/go-logr/logr/funcr.
@@ -93,12 +96,12 @@ func (f Formatter) attrs(kvList []interface{}) []*cpb.KeyValue {
 	}
 	out := make([]*cpb.KeyValue, (len(kvList)+1)/2)
 	for i := 0; i < len(kvList); i += 2 {
-		out[i/2] = f.assignKeyValue(kvList[i], kvList[i+1], 0)
+		out[i/2] = f.keyValue(kvList[i], kvList[i+1], 0)
 	}
 	return out
 }
 
-func (f Formatter) assignKeyValue(key, val interface{}, depth int) *cpb.KeyValue {
+func (f Formatter) keyValue(key, val interface{}, depth int) *cpb.KeyValue {
 	out := new(cpb.KeyValue)
 	switch k := key.(type) {
 	case string:
@@ -113,7 +116,7 @@ func (f Formatter) assignKeyValue(key, val interface{}, depth int) *cpb.KeyValue
 	default:
 		out.Key = f.nonStringKey(key)
 	}
-	out.Value = f.assignValue(val, depth)
+	out.Value = f.value(val, depth)
 	return out
 }
 
@@ -121,7 +124,7 @@ func (f Formatter) nonStringKey(k interface{}) string {
 	return fmt.Sprintf("<non-string-key: %s>", f.snippet(k))
 }
 
-func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
+func (f Formatter) value(val interface{}, depth int) *cpb.AnyValue {
 	out := new(cpb.AnyValue)
 	if depth > f.opts.MaxLogDepth {
 		out.Value = &cpb.AnyValue_StringValue{
@@ -234,7 +237,7 @@ func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
 				continue
 			}
 			if fld.Anonymous && fld.Type.Kind() == reflect.Struct && name == "" {
-				kv := f.assignKeyValue(fld.Type.String(), v.Field(i).Interface(), depth+1)
+				kv := f.keyValue(fld.Type.String(), v.Field(i).Interface(), depth+1)
 				kvs = append(kvs, kv)
 				continue
 			}
@@ -243,7 +246,7 @@ func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
 			}
 			kv := new(cpb.KeyValue)
 			kv.Key = name
-			kv.Value = f.assignValue(v.Field(i).Interface(), depth+1)
+			kv.Value = f.value(v.Field(i).Interface(), depth+1)
 			kvs = append(kvs, kv)
 		}
 		out.Value = &cpb.AnyValue_KvlistValue{
@@ -253,7 +256,7 @@ func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
 		a := make([]*cpb.AnyValue, v.Len())
 		for i := 0; i < v.Len(); i++ {
 			e := v.Index(i)
-			a[i] = f.assignValue(e.Interface(), depth+1)
+			a[i] = f.value(e.Interface(), depth+1)
 		}
 		out.Value = &cpb.AnyValue_ArrayValue{
 			ArrayValue: &cpb.ArrayValue{Values: a},
@@ -263,7 +266,7 @@ func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
 		iter := v.MapRange()
 		for iter.Next() {
 			k, v := iter.Key().Interface(), iter.Value().Interface()
-			kvs = append(kvs, f.assignKeyValue(k, v, depth+1))
+			kvs = append(kvs, f.keyValue(k, v, depth+1))
 		}
 		out.Value = &cpb.AnyValue_KvlistValue{
 			KvlistValue: &cpb.KeyValueList{Values: kvs},
@@ -273,7 +276,7 @@ func (f Formatter) assignValue(val interface{}, depth int) *cpb.AnyValue {
 			// Empty value.
 			return out
 		}
-		return f.assignValue(v.Elem().Interface(), depth)
+		return f.value(v.Elem().Interface(), depth)
 	}
 
 	if out.Value == nil {
@@ -475,6 +478,24 @@ func (f Formatter) FormatError(err error, msg string, kvList []interface{}) *lpb
 	}
 	const v = lpb.SeverityNumber_SEVERITY_NUMBER_ERROR
 	return f.render(v, f.errBody(err, msg), kvList)
+}
+
+func (f Formatter) FormatResource(res *resource.Resource) (string, *rpb.Resource) {
+	iter := res.Iter()
+	kvs := make([]*cpb.KeyValue, 0, iter.Len())
+	for iter.Next() {
+		attr := iter.Attribute()
+		kvs = append(kvs, f.keyValue(attr.Key, attr.Value.AsInterface(), 0))
+	}
+	return res.SchemaURL(), &rpb.Resource{Attributes: kvs}
+}
+
+func (f Formatter) FormatScope(s instrumentation.Scope) (string, *cpb.InstrumentationScope) {
+	out := &cpb.InstrumentationScope{
+		Name:    s.Name,
+		Version: s.Version,
+	}
+	return s.SchemaURL, out
 }
 
 // AddName appends the specified name.
