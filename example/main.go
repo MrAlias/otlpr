@@ -60,7 +60,11 @@ func main() {
 	ctx, span = tp.Tracer("github.com/MrAlias/otlpr/example").Start(ctx, "main")
 	defer span.End()
 
-	l := otlpr.WithContext(otlpr.New(conn), ctx)
+	l := otlpr.NewWithOptions(conn, otlpr.Options{
+		LogCaller:     otlpr.All,
+		LogCallerFunc: true,
+	})
+	l = otlpr.WithContext(l, ctx)
 	l.Info("information message", "function", "main")
 
 	err = errors.New("example error")

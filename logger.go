@@ -56,8 +56,8 @@ func NewWithOptions(conn *grpc.ClientConn, opts Options) logr.Logger {
 		formatter: internal.NewFormatter(fopts),
 	}
 
-	// For skipping both our own logSink.Info/Error and logr's.
-	l.formatter.AddCallDepth(2 + opts.Depth)
+	// For skip our own logSink.Info/Error.
+	l.formatter.AddCallDepth(1 + opts.Depth)
 
 	return logr.New(l)
 }
@@ -107,7 +107,9 @@ type logSink struct {
 
 var _ logr.LogSink = &logSink{}
 
-func (l *logSink) Init(ri logr.RuntimeInfo) {}
+func (l *logSink) Init(ri logr.RuntimeInfo) {
+	l.formatter.Init(ri)
+}
 
 func (l *logSink) Enabled(level int) bool {
 	return level >= l.level
