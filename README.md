@@ -39,3 +39,38 @@ logger = otlpr.WithContext(logger, context.Background())
 
 [`logr.Logger`]: https://pkg.go.dev/github.com/go-logr/logr#Logger
 [example]: ./example/
+
+## Adding a Resource
+
+The system a log message is produced in can be described with a [`Resource`].
+Use the `WithResource` function to include this information with the exported OTLP data.
+
+```go
+logger = otlpr.WithResource(logger, resource)
+```
+
+The function can also be used to clear any resource from the logger.
+
+```go
+logger = otlpr.WithResource(logger, nil)
+```
+
+## Adding Scope
+
+The portion of a system a log message is produced in can be described with [`Scope`].
+Use the `WithScope` function to include this information with the exported OTLP data.
+
+```go
+logger = otlpr.WithScope(logger, resource)
+```
+
+The function can also be used to clear any scope from the logger.
+
+```go
+logger = otlpr.WithScope(logger, instrumentation.Scope{})
+```
+
+[`logr.Logger`]: https://pkg.go.dev/github.com/go-logr/logr#Logger
+[example]: ./example/
+[`Resource`]: https://pkg.go.dev/go.opentelemetry.io/otel/sdk/resource#Resource
+[`Scope`]: https://pkg.go.dev/go.opentelemetry.io/otel/sdk/instrumentation#Scope
