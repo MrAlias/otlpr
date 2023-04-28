@@ -2,13 +2,13 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/MrAlias/otlpr.svg)](https://pkg.go.dev/github.com/MrAlias/otlpr)
 
-A logr implementation using OTLP
+This repository provides a [`logr.Logger`] that exports recorded messages as [OpenTelemetry logs] to an [OTLP] receiving endpoint.
 
-:construction: This repository is a work in progresss and not production ready.
+:construction: This repository is a work in progress and not production ready.
 
 ## Getting Started
 
-A working gRPC connection to an OTLP endpoint is needed to setup the logger.
+A working gRPC connection to an OTLP receiving endpoint is needed to setup the logger.
 
 ```go
 conn, _ := grpc.DialContext(ctx, otlpTarget)
@@ -88,6 +88,8 @@ logger = otlpr.WithScope(logger, instrumentation.Scope{})
 ```
 
 [`logr.Logger`]: https://pkg.go.dev/github.com/go-logr/logr#Logger
+[OpenTelemetry logs]: https://opentelemetry.io/docs/reference/specification/logs/data-model/
+[OTLP]: https://opentelemetry.io/docs/reference/specification/protocol/
 [example]: ./example/
 [`Resource`]: https://pkg.go.dev/go.opentelemetry.io/otel/sdk/resource#Resource
 [`Scope`]: https://pkg.go.dev/go.opentelemetry.io/otel/sdk/instrumentation#Scope
