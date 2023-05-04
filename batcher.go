@@ -38,9 +38,25 @@ type Batcher struct {
 	// If Timeout is less than or equal to zero the Batcher will never export
 	// based on queue staleness.
 	Timeout time.Duration
+	// ExportN is the maximum number of messages included in an export.
+	//
+	// For values less than or equal to zero the Batcher will export the whole
+	// queue in a single export.
+	ExportN int
 }
 
 type exportFunc func([]*lpb.LogRecord)
+
+func chunk(n int, f exportFunc) exportFunc {
+	return func(lr []*lpb.LogRecord) {
+		for i, j := 0, n; i < len(lr); i, j = i+n, j+n {
+			if j > len(lr) {
+				j = len(lr)
+			}
+			f(lr[i:j])
+		}
+	}
+}
 
 func (b Batcher) start(expFn exportFunc) *batcher {
 	if b.Messages == 0 {
@@ -66,6 +82,10 @@ type batcher struct {
 }
 
 func newBatcher(conf Batcher, expFn exportFunc) *batcher {
+	if conf.ExportN > 0 {
+		expFn = chunk(conf.ExportN, expFn)
+	}
+
 	b := &batcher{timeout: conf.Timeout, export: expFn}
 
 	ctx, cancel := context.WithCancel(context.Background())
