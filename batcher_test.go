@@ -16,14 +16,20 @@ package otlpr
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
 
-func TestChunk(t *testing.T) {
-	c := make(chan []*lpb.LogRecord, 3)
+func expFn(chSize int) (<-chan []*lpb.LogRecord, exportFunc) {
+	c := make(chan []*lpb.LogRecord, chSize)
 	f := func(in []*lpb.LogRecord) { c <- in }
+	return c, f
+}
+
+func TestChunk(t *testing.T) {
+	c, f := expFn(3)
 	f = chunk(10, f)
 	f(make([]*lpb.LogRecord, 25))
 
@@ -37,5 +43,53 @@ func TestChunk(t *testing.T) {
 	case v := <-c:
 		assert.Failf(t, "extra chunk", "length: %d", len(v))
 	default:
+	}
+}
+
+func assertNoExport(t *testing.T, c <-chan []*lpb.LogRecord) {
+	t.Helper()
+	select {
+	case got := <-c:
+		assert.Failf(t, "unexpected export", "%#v", got)
+	default:
+	}
+}
+
+func assertExport(t *testing.T, c <-chan []*lpb.LogRecord, n int) {
+	t.Helper()
+	select {
+	case got := <-c:
+		assert.Len(t, got, n)
+	default:
+		assert.Fail(t, "missing export")
+	}
+}
+
+func TestMessages(t *testing.T) {
+	c, f := expFn(1)
+	b := Batcher{Messages: 3}.start(f)
+	msg := &lpb.LogRecord{}
+
+	b.Append(msg)
+	assertNoExport(t, c)
+
+	b.Append(msg)
+	assertNoExport(t, c)
+
+	b.Append(msg)
+	assertExport(t, c, 3)
+}
+
+func TestTimeout(t *testing.T) {
+	c, f := expFn(1)
+	b := Batcher{Messages: 2048, Timeout: time.Nanosecond}.start(f)
+	msg := &lpb.LogRecord{}
+
+	b.Append(msg)
+	select {
+	case got := <-c:
+		assert.Len(t, got, 1)
+	case <-time.After(3 * time.Second):
+		assert.Fail(t, "missing export")
 	}
 }
