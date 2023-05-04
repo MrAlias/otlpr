@@ -24,7 +24,9 @@ See the [example] for a working example application.
 
 ## Batching
 
-By default the logger will export single log messages as they are received.
+By default the logger will batch the log messages as they are received.
+It will wait to batch `2048` messages before exporting.
+
 A `Batcher` can be used to change this behavior.
 
 ```go

@@ -24,12 +24,13 @@ import (
 	lpb "go.opentelemetry.io/proto/otlp/logs/v1"
 )
 
+const defaultMessages = 2048
+
 type Batcher struct {
 	// Messages is the maximum number of messages to queue. Once this many
 	// messages have been queued the Batcher will export the queue.
 	//
-	// If Messages is less than or equal to one it will export messages as they
-	// arrive, no batching will be perfomed.
+	// If Messages is zero, the default value of 2048 is used.
 	Messages uint64
 	// Timeout is the maximum time to wait for a full queue. Once this much
 	// time has elapsed since the last export or start the Batcher will export
@@ -60,7 +61,7 @@ func chunk(n int, f exportFunc) exportFunc {
 
 func (b Batcher) start(expFn exportFunc) *batcher {
 	if b.Messages == 0 {
-		b.Messages = 1
+		b.Messages = defaultMessages
 	}
 	if expFn == nil {
 		expFn = func([]*lpb.LogRecord) {}
