@@ -39,6 +39,21 @@ opts := otlpr.Options{
 logger := otlpr.NewWithOptions(conn, opts)
 ```
 
+### Max messages in export
+
+The `Batcher` can be configured to limit the number of messages it sends for
+each export with the `ExportN` setting.
+
+```go
+opts := otlpr.Options{
+	Batcher: otlpr.Batcher{
+		// Only send at most 100 messages per export.
+		ExportN: 100,
+	},
+}
+logger := otlpr.NewWithOptions(conn, opts)
+```
+
 ## Annotating Span Context
 
 OTLP is able to associate span context with log messages.
