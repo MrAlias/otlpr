@@ -37,6 +37,8 @@ import (
 
 // Based on https://pkg.go.dev/github.com/go-logr/logr/funcr.
 
+var now = time.Now
+
 const noValue = "<no-value>"
 
 // Defaults for Options.
@@ -414,7 +416,7 @@ func (f Formatter) caller() Caller {
 
 func (f Formatter) render(v lpb.SeverityNumber, body *cpb.AnyValue, kvList []interface{}) *lpb.LogRecord {
 	out := &lpb.LogRecord{
-		TimeUnixNano:   uint64(time.Now().UnixNano()),
+		TimeUnixNano:   uint64(now().UnixNano()),
 		SeverityNumber: v,
 		Body:           body,
 		Attributes:     append(f.valuesAttr, f.attrs(kvList)...),
