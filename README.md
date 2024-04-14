@@ -11,7 +11,7 @@ This repository provides a [`logr.Logger`] that exports recorded messages as [Op
 A working gRPC connection to an OTLP receiving endpoint is needed to setup the logger.
 
 ```go
-conn, _ := grpc.DialContext(ctx, otlpTarget)
+conn, _ := grpc.NewClient(otlpTarget)
 ```
 
 Create a [`logr.Logger`] with this connection.
