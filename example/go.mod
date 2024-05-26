@@ -6,7 +6,7 @@ replace github.com/MrAlias/otlpr => ../
 
 require (
 	github.com/MrAlias/otlpr v0.0.0-00010101000000-000000000000
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	go.opentelemetry.io/otel v1.24.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.24.0
 	go.opentelemetry.io/otel/sdk v1.24.0
