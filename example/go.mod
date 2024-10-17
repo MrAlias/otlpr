@@ -1,7 +1,6 @@
 module github.com/MrAlias/otlpr/example
 
-go 1.21.0
-toolchain go1.22.5
+go 1.22.0
 
 replace github.com/MrAlias/otlpr => ../
 
