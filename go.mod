@@ -1,7 +1,6 @@
 module github.com/MrAlias/otlpr
 
-go 1.21.0
-toolchain go1.22.5
+go 1.22.0
 
 require (
 	github.com/go-logr/logr v1.4.2
