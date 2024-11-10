@@ -1,6 +1,7 @@
 module github.com/MrAlias/otlpr/example
 
 go 1.22.0
+toolchain go1.22.9
 
 replace github.com/MrAlias/otlpr => ../
 
@@ -11,7 +12,7 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.32.0
 	go.opentelemetry.io/otel/sdk v1.32.0
 	go.opentelemetry.io/otel/trace v1.32.0
-	google.golang.org/grpc v1.67.1
+	google.golang.org/grpc v1.68.0
 )
 
 require (
