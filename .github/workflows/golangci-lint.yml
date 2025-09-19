@@ -24,7 +24,7 @@ jobs:
       matrix:
         modules: ${{fromJson(needs.generate-matrix.outputs.matrix)}}
     steps:
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v6
         with:
           go-version: "stable"
           check-latest: true
