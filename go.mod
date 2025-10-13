@@ -1,6 +1,6 @@
 module github.com/MrAlias/otlpr
 
-go 1.23.0
+go 1.24.0
 
 require (
 	github.com/go-logr/logr v1.4.3
@@ -9,7 +9,7 @@ require (
 	go.opentelemetry.io/otel/sdk v1.38.0
 	go.opentelemetry.io/otel/trace v1.38.0
 	go.opentelemetry.io/proto/otlp v1.8.0
-	google.golang.org/grpc v1.75.1
+	google.golang.org/grpc v1.76.0
 )
 
 require (
