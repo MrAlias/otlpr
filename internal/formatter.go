@@ -276,7 +276,7 @@ func (f Formatter) value(val interface{}, depth int) *cpb.AnyValue {
 		out.Value = &cpb.AnyValue_KvlistValue{
 			KvlistValue: &cpb.KeyValueList{Values: kvs},
 		}
-	case reflect.Ptr, reflect.Interface:
+	case reflect.Pointer, reflect.Interface:
 		if v.IsNil() {
 			// Empty value.
 			return out
@@ -306,7 +306,7 @@ func isEmpty(v reflect.Value) bool {
 		return v.Float() == 0
 	case reflect.Complex64, reflect.Complex128:
 		return v.Complex() == 0
-	case reflect.Interface, reflect.Ptr:
+	case reflect.Interface, reflect.Pointer:
 		return v.IsNil()
 	}
 	return false
